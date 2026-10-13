@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вишлист Павлика — редактор</title>
+<style>
+  :root{
+    --bg:#e2f4dd; --surface:#fff; --surface-2:#edf8e9;
+    --line:rgba(56,92,60,.11); --line-strong:rgba(56,92,60,.22);
+    --text:#33482f; --muted:#6f8c6b;
+    --accent:#8e6fc4; --accent-deep:#6f52a8; --accent-2:#8fd39a; --leaf:#b7e3ae;
+    --danger:#c9605f;
+    --radius:18px;
+    --shadow:0 12px 28px rgba(64,102,66,.16);
+    --shadow-lg:0 24px 60px rgba(64,102,66,.24);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;color:var(--text);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    background:
+      radial-gradient(1150px 660px at 4% -16%, rgba(143,211,154,.62), transparent 66%),
+      radial-gradient(920px 580px at 106% -8%, rgba(183,227,174,.66), transparent 62%),
+      radial-gradient(860px 600px at 50% 112%, rgba(143,211,154,.42), transparent 64%),
+      var(--bg);
+    background-attachment:fixed;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1120px;margin:0 auto;padding:34px 18px 90px}
+  h1{
+    margin:0 0 6px;font-size:clamp(24px,4.6vw,38px);font-weight:800;letter-spacing:-.02em;text-align:center;
+    background:linear-gradient(100deg,#7f5fb8 5%,#5f9c72 55%,#8fd39a 95%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .setup{max-width:520px;margin:60px auto;padding:28px;border-radius:22px;background:rgba(255,255,255,.9);
+    box-shadow:var(--shadow);text-align:center}
+  .setup h2{margin:0 0 10px;font-size:20px}
+  .setup p{color:var(--muted);margin:0 0 20px}
+
+  .bar{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin:18px 0 10px}
+  .btn{
+    appearance:none;border:1px solid var(--line-strong);border-radius:12px;cursor:pointer;
+    background:rgba(255,255,255,.86);color:var(--text);padding:10px 16px;
+    font:inherit;font-size:14px;font-weight:600;display:inline-flex;align-items:center;gap:8px;
+    transition:transform .12s,background .18s,border-color .18s;
+  }
+  .btn:hover{background:#fff;border-color:rgba(142,111,196,.55);transform:translateY(-1px)}
+  .btn:active{transform:none}
+  .btn.primary{background:linear-gradient(135deg,#a184d6,#8e6fc4);border-color:rgba(111,82,168,.5);color:#fff;
+    box-shadow:0 6px 16px rgba(142,111,196,.3)}
+  .btn.primary:hover{background:linear-gradient(135deg,#9577cf,#7f5fb8)}
+  .btn.ghost{background:rgba(255,255,255,.6)}
+  .btn.small{padding:7px 12px;font-size:13px}
+  .btn.danger{color:var(--danger);border-color:rgba(201,96,95,.4)}
+  .btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+
+  .stats{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;margin-bottom:22px}
+  .chip{
+    padding:7px 14px;border-radius:999px;background:rgba(255,255,255,.75);
+    border:1px solid rgba(143,211,154,.85);font-size:13px;color:#3f6b4b;
+  }
+  .chip b{color:var(--text)}
+
+  .grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:22px}
+  .card{perspective:1200px;position:relative}
+  .inner{position:relative;transition:transform .6s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d}
+  .card.flipped .inner{transform:rotateY(180deg)}
+  .face{border-radius:var(--radius);border:1px solid rgba(255,255,255,.9);background:var(--surface);
+    box-shadow:var(--shadow);overflow:hidden;backface-visibility:hidden;-webkit-backface-visibility:hidden}
+  .face.front{cursor:pointer;display:flex;flex-direction:column;min-height:320px}
+  .face.back{position:absolute;inset:0;transform:rotateY(180deg);display:flex;flex-direction:column;
+    background:linear-gradient(155deg,#cdb9f0,#e2d8f6 32%,#eef7e4 68%,#c9e8c4)}
+  .back-flip{appearance:none;border:none;background:transparent;font:inherit;color:inherit;text-align:left;
+    cursor:pointer;width:100%;height:100%;padding:18px;display:flex;flex-direction:column;gap:10px}
+  .thumb{flex:1;padding:14px;display:flex;align-items:center;justify-content:center;
+    background:linear-gradient(180deg,#fbfdfa,#f2f8ef)}
+  .frame{width:100%;height:100%;min-height:190px;display:flex;align-items:center;justify-content:center;
+    padding:9px;border-radius:14px;overflow:hidden;
+    background:linear-gradient(160deg,rgba(142,111,196,.22),rgba(142,111,196,.13));
+    border:2px solid rgba(142,111,196,.5)}
+  .frame.no-photo{border-style:dashed}
+  .frame img{max-width:100%;max-height:220px;object-fit:contain;border-radius:8px;display:block}
+  .frame .nofoto{color:var(--muted);font-size:12.5px;text-align:center;padding:12px;line-height:1.35}
+  .frame .nofoto small{display:block;font-size:11px;opacity:.85;margin-top:3px}
+  .front-bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;
+    border-top:1px solid var(--line);background:linear-gradient(180deg,#fff,#f4faf2)}
+  .front-bar .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .front-bar .price{color:var(--accent-deep);font-weight:800;font-size:15px;white-space:nowrap}
+  .back h3{margin:0;font-size:17px;color:#332a4d;line-height:1.25}
+  .back .price{color:#5b3f96;font-weight:800;font-size:22px}
+  .back .desc{font-size:13.5px;color:#4f5a63;flex:1;overflow:auto;white-space:pre-wrap}
+  .store{align-self:flex-start;font-size:12.5px;color:#3f6b4b;padding:5px 10px;border-radius:999px;
+    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.7);
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .back-actions{display:flex;gap:8px;margin-top:auto}
+  .back-actions .btn{flex:1;justify-content:center}
+  .back-hint{font-size:11px;color:#6b5b8a;text-align:center;border-top:1px solid rgba(142,111,196,.22);padding-top:8px}
+  .badge{position:absolute;top:10px;left:10px;z-index:3;padding:5px 10px;border-radius:999px;
+    font-size:11px;font-weight:700;background:rgba(255,255,255,.94);
+    border:1px solid rgba(143,211,154,.85);color:#3f7355}
+  .prio{position:absolute;top:10px;right:10px;z-index:3;font-size:11px;font-weight:700;
+    padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.94)}
+  .prio.p1{color:#c9605f;border:1px solid rgba(201,96,95,.6)}
+  .prio.p2{color:#c99a3f;border:1px solid rgba(201,154,63,.6)}
+  .prio.p3{color:#6f8c6b;border:1px solid rgba(111,140,107,.5)}
+  .card.taken .frame img,.card.taken .frame .nofoto{filter:grayscale(.85);opacity:.55}
+  .card.taken .front-bar .name{text-decoration:line-through;color:var(--muted)}
+  .icon-btn{position:absolute;top:8px;z-index:4;width:30px;height:30px;border-radius:9px;display:grid;
+    place-items:center;border:1px solid rgba(142,111,196,.42);background:rgba(255,255,255,.92);
+    color:#6a5a8c;cursor:pointer;font-size:14px;line-height:1;opacity:0;transition:opacity .18s,color .18s}
+  .card:hover .icon-btn,.card:focus-within .icon-btn{opacity:1}
+  .icon-btn:hover{color:#4b3d70;background:#fff}
+  .icon-btn.del{right:8px}
+  .icon-btn.del:hover{color:var(--danger)}
+  .icon-btn.edit{right:44px}
+  .icon-btn.take{right:80px}
+  @media (hover:none){ .icon-btn{opacity:1} }
+
+  .empty{text-align:center;padding:60px 20px;border:1px dashed rgba(143,211,154,.85);
+    border-radius:22px;color:var(--muted);background:rgba(255,255,255,.6);margin-top:22px}
+  .empty h2{margin:0 0 8px;color:var(--text);font-size:19px}
+
+  dialog{border:none;padding:0;background:transparent;max-width:min(560px,94vw);width:100%;color:var(--text)}
+  dialog::backdrop{background:rgba(60,84,66,.32);backdrop-filter:blur(4px)}
+  dialog.fallback-open{position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);z-index:99;max-height:90vh}
+  dialog.fallback-open::before{content:"";position:fixed;inset:0;background:rgba(60,84,66,.32);z-index:-1}
+  .dlg{background:#fff;border:1px solid rgba(143,211,154,.5);border-radius:20px;padding:22px;
+    box-shadow:var(--shadow-lg);max-height:90vh;overflow:auto}
+  .dlg h2{margin:0 0 16px;font-size:19px}
+  .field{margin-bottom:13px}
+  .field label{display:block;font-size:12.5px;color:#6a7d6d;margin-bottom:6px;font-weight:600}
+  .field input,.field textarea,.field select{
+    width:100%;padding:11px 13px;border-radius:11px;font:inherit;font-size:14px;
+    background:var(--surface-2);border:1px solid var(--line);color:var(--text)}
+  .field input:focus,.field textarea:focus,.field select:focus{
+    outline:none;background:#fff;border-color:var(--accent);box-shadow:0 0 0 3px rgba(142,111,196,.2)}
+  .field textarea{resize:vertical;min-height:64px}
+  .field .hint{font-size:12px;color:var(--muted);margin-top:5px}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .actions{display:flex;gap:10px;justify-content:flex-end;margin-top:18px;flex-wrap:wrap}
+  .err{display:none;margin-bottom:13px;padding:10px 13px;border-radius:11px;font-size:13.5px;
+    background:rgba(201,96,95,.12);border:1px solid rgba(201,96,95,.4);color:#a0504f}
+  .err.show{display:block}
+  .msg{max-width:680px;margin:14px auto 0;padding:11px 16px;border-radius:14px;font-size:13.5px;
+    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.8);text-align:center}
+  .msg.warn{border-color:rgba(201,154,63,.7);background:rgba(255,251,240,.9)}
+  .msg a{color:var(--accent-deep)}
+  .linkbox{display:flex;gap:8px;align-items:center;max-width:760px;margin:12px auto 0;flex-wrap:wrap;justify-content:center}
+  .linkbox input{
+    flex:1;min-width:220px;padding:11px 13px;border-radius:11px;font:inherit;font-size:13px;
+    background:rgba(255,255,255,.9);border:1px solid rgba(142,111,196,.4);color:var(--text)}
+  .photo-preview{display:flex;gap:12px;align-items:flex-start;margin-top:8px}
+  .photo-preview .pic{width:80px;height:80px;border-radius:11px;overflow:hidden;flex:0 0 auto;
+    background:var(--surface-2);border:1px solid var(--line);display:grid;place-items:center}
+  .photo-preview .pic img{width:100%;height:100%;object-fit:cover;display:block}
+  .photo-preview .side{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+  .src{font-size:12px;color:var(--muted)}
+  .row{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* строки в окне «Мои списки» */
+  .listrow{
+    display:flex;align-items:center;justify-content:space-between;gap:12px;
+    padding:12px;border-radius:13px;margin-bottom:9px;
+    background:var(--surface-2);border:1px solid var(--line);
+  }
+  .listrow:last-child{margin-bottom:0}
+  .listinfo{min-width:0}
+  .listname{font-weight:600;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .listname .cur{
+    font-size:11px;font-weight:700;color:#3f7355;margin-left:6px;
+    border:1px solid rgba(143,211,154,.9);background:rgba(143,211,154,.2);
+    padding:2px 7px;border-radius:999px;vertical-align:middle;
+  }
+  @media (max-width:520px){
+    .wrap{padding:22px 12px 70px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+    .face.front{min-height:250px}
+    .row2{grid-template-columns:1fr}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="app">
+  <div class="setup">
+    <h2>Открываю вишлист…</h2>
+    <p>Секунду.</p>
+  </div>
+</div>
+
+<dialog id="dlg">
+  <form class="dlg" id="form" method="dialog" novalidate>
+    <h2 id="dlgTitle">Новый подарок</h2>
+    <div class="err" id="err"></div>
+
+    <div class="field">
+      <label for="fUrl">Ссылка на товар</label>
+      <input id="fUrl" type="url" placeholder="https://..." autocomplete="off">
+      <div class="hint">Вставь ссылку — название подтянется само.</div>
+    </div>
+
+    <div class="field">
+      <label for="fName">Название</label>
+      <input id="fName" placeholder="Чайный набор" autocomplete="off">
+    </div>
+
+    <div class="row2">
+      <div class="field">
+        <label for="fPrice">Сколько стоит</label>
+        <input id="fPrice" placeholder="6478" autocomplete="off">
+      </div>
+      <div class="field">
+        <label for="fPriority">Насколько хочу</label>
+        <select id="fPriority">
+          <option value="1">Очень хочу</option>
+          <option value="2" selected>Хочу</option>
+          <option value="3">Было бы неплохо</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="fStore">Магазин</label>
+      <input id="fStore" placeholder="определится по ссылке" autocomplete="off">
+    </div>
+
+    <div class="field">
+      <label>Фото товара</label>
+      <div class="row">
+        <input type="file" id="fFile" accept="image/*" style="flex:1">
+      </div>
+      <div class="hint">Загруженное фото хранится на сайте — оно не пропадёт, даже если магазин его закроет.</div>
+      <div class="photo-preview" id="photoBox" hidden>
+        <div class="pic" id="photoPic"></div>
+        <div class="side">
+          <span class="src" id="photoSrc"></span>
+          <button type="button" class="btn ghost small" id="clearPhoto">Убрать фото</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="fImg2">Или ссылка на фото</label>
+      <input id="fImg2" type="url" placeholder="https://...jpg" autocomplete="off">
+      <div class="hint">Из магазина: правый клик по фото → «Копировать адрес изображения».</div>
+    </div>
+
+    <div class="field">
+      <label for="fNote">Заметка</label>
+      <textarea id="fNote" placeholder="Размер M, цвет чёрный"></textarea>
+    </div>
+
+    <div class="actions">
+      <button type="button" class="btn ghost" id="cancelBtn">Отмена</button>
+      <button type="submit" class="btn primary" id="saveBtn">Сохранить</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="shareDlg">
+  <div class="dlg">
+    <h2>Ссылка для друзей</h2>
+    <p style="margin:0 0 12px;color:var(--muted);font-size:13.5px">
+      Короткая ссылка — её можно отправить в любом мессенджере. Друзья увидят список
+      только для просмотра: правки им недоступны.
+    </p>
+    <div class="field">
+      <input id="shareUrl" readonly style="font-size:13px">
+    </div>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="openShare">Открыть в новой вкладке</button>
+      <button type="button" class="btn ghost" id="copyShare">Скопировать</button>
+      <button type="button" class="btn primary" id="closeShare">Готово</button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="listsDlg">
+  <div class="dlg">
+    <h2>Мои списки</h2>
+    <p style="margin:0 0 14px;color:var(--muted);font-size:13.5px">
+      Можно вести несколько списков — например, на день рождения и на Новый год.
+      У каждого своя короткая ссылка.
+    </p>
+    <div id="listsBox"></div>
+    <div class="actions">
+      <button type="button" class="btn ghost" id="newListBtn">+ Новый список</button>
+      <button type="button" class="btn primary" id="closeLists">Закрыть</button>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+"use strict";
+
+/* ============================================================
+   Вишлист с сервером: список хранится на сайте, ссылка короткая.
+   Токен хозяина лежит в этом браузере — по нему открывается редактор.
+   ============================================================ */
+const TOKEN_KEY = 'wishlist.token';
+const app = document.getElementById('app');
+const dlg = document.getElementById('dlg');
+const shareDlg = document.getElementById('shareDlg');
+const listsDlg = document.getElementById('listsDlg');
+const canModal = typeof dlg.showModal === 'function';
+
+let token = '';
+let list = null;          // текущий открытый список
+let lists = [];           // все списки хозяина
+let currentCode = '';     // код открытого списка
+let stats = null;
+let editingId = null;
+let photoId = '';          // id фото, загруженного на сервер
+let pendingPhoto = null;   // файл, который надо загрузить при сохранении
+
+const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+/* ---------- обращения к серверу ---------- */
+async function api(method, path, body){
+  const opts = { method, headers: { accept: 'application/json' } };
+  if (token) opts.headers['X-Owner-Token'] = token;
+  if (body !== undefined){
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  }
+  // почти каждый запрос идёт с кодом списка: у хозяина их может быть несколько
+  const withCode = currentCode
+    ? path + (path.indexOf('?') > -1 ? '&' : '?') + 'code=' + encodeURIComponent(currentCode)
+    : path;
+  const res = await fetch('/api' + withCode, opts);
+  const text = await res.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) {}
+  if (!res.ok) throw new Error((data && data.error) || ('ошибка ' + res.status));
+  return data;
+}
+
+async function uploadPhoto(file){
+  const fd = new FormData();
+  fd.append('photo', file, file.name || 'photo.jpg');
+  const url = '/api/photo' + (currentCode ? '?code=' + encodeURIComponent(currentCode) : '');
+  const res = await fetch(url, { method: 'POST', headers: { 'X-Owner-Token': token }, body: fd });
+  const data = await res.json().catch(() => null);
+  if (!res.ok) throw new Error((data && data.error) || 'не удалось загрузить фото');
+  return data.photo;
+}
+
+/* ---------- показ ошибок ---------- */
+function showError(msg){
+  const e = $('err');
+  if (!e) return;
+  e.textContent = msg || '';
+  e.classList.toggle('show', !!msg);
+}
+
+function toast(text, warn){
+  const old = app.querySelector('.toast');
+  if (old) old.remove();
+  const d = document.createElement('div');
+  d.className = 'msg toast' + (warn ? ' warn' : '');
+  d.textContent = text;
+  app.insertBefore(d, app.firstChild);
+  setTimeout(() => d.remove(), 5000);
+}
+
+/* ---------- цена ---------- */
+function formatPrice(v){
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (/[₽$€£¥]|руб|р\.|rub|usd|eur/i.test(s)) return s;
+  const plain = s.replace(/\s/g, '');
+  if (/^\d{3,}$/.test(plain)) s = plain.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  else if (/^\d+([.,]\d{1,2})?$/.test(plain)) s = plain.replace('.', ',');
+  return s + ' ₽';
+}
+
+const PRIO = { 1: ['Очень хочу', 'p1'], 2: ['Хочу', 'p2'], 3: ['Было бы неплохо', 'p3'] };
+
+/* ---------- рисование ---------- */
+function render(){
+  if (!list){
+    app.innerHTML = `
+      <h1>Вишлист Павлика</h1>
+      <div class="setup">
+        <h2>Здесь будет твой вишлист</h2>
+        <p>Создадим список? Ты получишь короткую ссылку, которую сможешь отправить друзьям.</p>
+        <button class="btn primary" id="createBtn">Создать вишлист</button>
+      </div>`;
+    $('createBtn').addEventListener('click', createList);
+    return;
+  }
+
+  const items = list.items || [];
+  const free = items.filter(i => !i.taken).length;
+  const s = stats || {};
+
+  app.innerHTML = `
+    <h1>${esc(list.title || 'Вишлист')}</h1>
+    <div class="stats">
+      <span class="chip">Подарков: <b>${items.length}</b></span>
+      <span class="chip">Свободно: <b>${free}</b></span>
+      <span class="chip">Подарено: <b>${items.length - free}</b></span>
+      <span class="chip">Просмотров: <b>${s.views_total || 0}</b></span>
+      <span class="chip">Код: <b>${esc(list.code)}</b></span>
+    </div>
+    <div class="bar">
+      <button class="btn primary" id="addBtn">+ Добавить подарок</button>
+      <button class="btn ghost" id="shareBtn">Ссылка для друзей</button>
+      <button class="btn ghost" id="listsBtn">Мои списки (${lists.length})</button>
+      <button class="btn ghost" id="titleBtn">Название и заметка</button>
+      <button class="btn ghost danger" id="wipeBtn">Удалить список</button>
+    </div>
+    ${items.length
+      ? `<div class="grid">${items.map(cardHtml).join('')}</div>`
+      : `<div class="empty"><h2>Пока пусто</h2><p>Добавь первый подарок — фото подтянется по ссылке.</p>
+         <button class="btn primary" id="emptyAdd">+ Добавить подарок</button></div>`}
+  `;
+
+  $('addBtn').addEventListener('click', () => openDialog(null));
+  const emptyAdd = $('emptyAdd');
+  if (emptyAdd) emptyAdd.addEventListener('click', () => openDialog(null));
+  $('shareBtn').addEventListener('click', showShare);
+  $('listsBtn').addEventListener('click', showLists);
+  $('titleBtn').addEventListener('click', editTitle);
+  $('wipeBtn').addEventListener('click', wipeList);
+
+  app.querySelectorAll('.card').forEach(card => {
+    const id = Number(card.dataset.id);
+    const item = items.find(i => i.id === id);
+    const front = card.querySelector('.front');
+    const backFlip = card.querySelector('.back-flip');
+    front.addEventListener('click', () => card.classList.toggle('flipped'));
+    backFlip.addEventListener('click', e => {
+      if (e.target.closest('a, button:not(.back-flip)')) return;
+      card.classList.remove('flipped');
+    });
+    const take = card.querySelector('.take');
+    take.addEventListener('click', async e => {
+      e.stopPropagation();
+      try {
+        await api('PATCH', '/items?id=' + id, { taken: !item.taken });
+        await reload();
+      } catch (err){ toast('Не удалось отметить: ' + err.message, true); }
+    });
+    const edit = card.querySelector('.edit');
+    edit.addEventListener('click', e => { e.stopPropagation(); openDialog(item); });
+    const del = card.querySelector('.del');
+    del.addEventListener('click', async e => {
+      e.stopPropagation();
+      if (!confirm(`Удалить «${item.name}»?`)) return;
+      try { await api('DELETE', '/items?id=' + id); await reload(); }
+      catch (err){ toast('Не удалось удалить: ' + err.message, true); }
+    });
+  });
+}
+
+function cardHtml(it){
+  const price = formatPrice(it.price);
+  const prio = PRIO[it.priority] || PRIO[2];
+  const photo = it.img
+    ? `<img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy" referrerpolicy="no-referrer"
+         onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'nofoto',textContent:'Фото не открылось'}))">`
+    : `<div class="nofoto">Фото не подтянулось<small>Загрузи своё в редакторе</small></div>`;
+  return `
+  <div class="card${it.taken ? ' taken' : ''}" data-id="${it.id}">
+    ${it.taken ? '<span class="badge">УЖЕ ПОДАРЕНО</span>' : ''}
+    <span class="prio ${prio[1]}">${esc(prio[0])}</span>
+    <button class="icon-btn take" title="${it.taken ? 'Вернуть в список' : 'Отметить подаренным'}">${it.taken ? '↺' : '✓'}</button>
+    <button class="icon-btn edit" title="Изменить">✎</button>
+    <button class="icon-btn del" title="Удалить">🗑</button>
+    <div class="inner">
+      <div class="face front">
+        <div class="thumb"><div class="frame${it.img ? '' : ' no-photo'}">${photo}</div></div>
+        <div class="front-bar">
+          <span class="name">${esc(it.name)}</span>
+          ${price ? `<span class="price">${esc(price)}</span>` : ''}
+        </div>
+      </div>
+      <div class="face back">
+        <button type="button" class="back-flip">
+          <h3>${esc(it.name)}</h3>
+          ${price ? `<div class="price">${esc(price)}</div>` : ''}
+          ${it.store ? `<span class="store">🛍 ${esc(it.store)}</span>` : ''}
+          <div class="desc">${esc(it.note || '')}</div>
+          <div class="back-actions">
+            ${it.url ? `<a class="btn primary small" href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">Открыть сайт</a>` : ''}
+          </div>
+          <div class="back-hint">нажми, чтобы вернуть карточку</div>
+        </button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ---------- загрузка данных ---------- */
+async function reload(){
+  const data = await api('GET', '/list');
+  lists = data.lists || [];
+  if (!data.list){
+    // у хозяина ещё нет ни одного списка
+    list = null;
+    stats = null;
+    currentCode = '';
+    render();
+    return;
+  }
+  list = data.list;
+  stats = data.stats || null;
+  currentCode = list.code;
+  render();
+}
+
+/* ---------- Мои списки ---------- */
+function showLists(){
+  const box = $('listsBox');
+  box.innerHTML = lists.length
+    ? lists.map(l => `
+        <div class="listrow" data-code="${esc(l.code)}">
+          <div class="listinfo">
+            <div class="listname">${esc(l.title || 'Вишлист')}${l.code === currentCode ? ' <span class="cur">открыт</span>' : ''}</div>
+            <div class="src">Код ${esc(l.code)} · подарков ${l.items_total} · свободно ${l.items_free} · просмотров ${l.views_total}</div>
+          </div>
+          <div class="row">
+            ${l.code === currentCode ? '' : `<button type="button" class="btn ghost small open-list" data-code="${esc(l.code)}">Открыть</button>`}
+            <button type="button" class="btn ghost small link-list" data-code="${esc(l.code)}">Ссылка</button>
+          </div>
+        </div>`).join('')
+    : '<p class="src" style="text-align:center;padding:16px 0">Списков пока нет.</p>';
+
+  box.querySelectorAll('.open-list').forEach(b => {
+    b.addEventListener('click', async () => {
+      currentCode = b.dataset.code;
+      closeListsDialog();
+      await reload();
+    });
+  });
+  box.querySelectorAll('.link-list').forEach(b => {
+    b.addEventListener('click', () => {
+      const code = b.dataset.code;
+      const url = location.origin + '/v/' + code;
+      $('shareUrl').value = url;
+      closeListsDialog();
+      if (canModal){ try { shareDlg.showModal(); } catch (e){ openFallback(shareDlg); } } else openFallback(shareDlg);
+    });
+  });
+
+  if (canModal){ try { listsDlg.showModal(); } catch (e){ openFallback(listsDlg); } } else openFallback(listsDlg);
+}
+
+function closeListsDialog(){
+  if (canModal && listsDlg.open){ try { listsDlg.close(); return; } catch (e) {} }
+  closeFallback(listsDlg);
+}
+
+$('closeLists').addEventListener('click', closeListsDialog);
+$('newListBtn').addEventListener('click', async () => {
+  const title = prompt('Название нового списка:', 'Вишлист');
+  if (title === null) return;
+  try {
+    const res = await fetch('/api/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', ...(token ? { 'X-Owner-Token': token } : {}) },
+      body: JSON.stringify({ title: title.trim() || 'Вишлист' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data && data.error) || 'не получилось');
+    if (!token){
+      token = data.token;
+      try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    }
+    currentCode = data.list.code;
+    closeListsDialog();
+    await reload();
+    toast('Список создан');
+  } catch (e){
+    toast('Не удалось создать: ' + e.message, true);
+  }
+});
+
+async function boot(){
+  try { token = localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { token = ''; }
+
+  if (!token){
+    render();
+    return;
+  }
+  try {
+    await reload();
+  } catch (e){
+    // токен устарел или список удалён — предложим создать заново
+    try { localStorage.removeItem(TOKEN_KEY); } catch (err) {}
+    token = '';
+    render();
+  }
+}
+
+async function createList(){
+  try {
+    const res = await fetch('/api/list', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Вишлист Павлика' }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error((data && data.error) || 'не получилось');
+    token = data.token;
+    currentCode = data.list.code;
+    try { localStorage.setItem(TOKEN_KEY, token); } catch (e) {}
+    await reload();
+    toast('Список создан. Нажми «Ссылка для друзей», чтобы отправить его.');
+  } catch (e){
+    toast('Не удалось создать список: ' + e.message, true);
+  }
+}
+/* ---------- форма подарка ---------- */
+function setPhotoView(url, source){
+  const box = $('photoBox');
+  const pic = $('photoPic');
+  pic.innerHTML = url ? `<img src="${esc(url)}" alt="фото" referrerpolicy="no-referrer">` : '';
+  $('photoSrc').textContent = source || '';
+  box.hidden = !url;
+}
+
+function openDialog(item){
+  editingId = item ? item.id : null;
+  photoId = item && item.img && item.img.indexOf('/p/') === 0 ? item.img.slice(3) : '';
+  pendingPhoto = null;
+  $('dlgTitle').textContent = item ? 'Изменить подарок' : 'Новый подарок';
+  $('fUrl').value = item ? item.url : '';
+  $('fName').value = item ? item.name : '';
+  $('fPrice').value = item ? item.price : '';
+  $('fStore').value = item ? item.store : '';
+  $('fNote').value = item ? item.note : '';
+  $('fPriority').value = String(item ? item.priority : 2);
+  $('fFile').value = '';
+  $('fImg2').value = item && item.img && item.img.indexOf('/p/') !== 0 ? item.img : '';
+  showError('');
+  setPhotoView(item && item.img ? item.img : '', photoId ? 'фото с сайта' : (item && item.img ? 'ссылка на фото' : ''));
+
+  if (canModal){ try { dlg.showModal(); } catch (e){ openFallback(dlg); } }
+  else openFallback(dlg);
+  setTimeout(() => $('fUrl').focus(), 60);
+}
+
+function openFallback(el){
+  el.setAttribute('open', '');
+  el.classList.add('fallback-open');
+}
+function closeFallback(el){
+  el.removeAttribute('open');
+  el.classList.remove('fallback-open');
+}
+function closeDialog(){
+  if (canModal && dlg.open){ try { dlg.close(); return; } catch (e) {} }
+  closeFallback(dlg);
+}
+
+// название из адреса: ozon.ru/product/chaychay-nabor-123 -> «Chaychay nabor»
+function slugToName(url){
+  try {
+    const u = new URL(url, location.href);
+    const parts = u.pathname.split('/').filter(Boolean)
+      .map(s => decodeURIComponent(s).replace(/\.(html?|aspx|php)$/i, ''))
+      .filter(s => !/^(t|p|s|product|catalog|item|items|goods|detail|dp)$/i.test(s))
+      .filter(s => !/^\d+$/.test(s));
+    const last = parts[parts.length - 1];
+    if (!last) return '';
+    const words = last.split(/[-_]+/).filter(w => w && !/^\d{3,}$/.test(w));
+    if (!words.length) return '';
+    const t = words.slice(0, 8).join(' ');
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  } catch (e) { return ''; }
+}
+
+// как только вставили ссылку — достаём название и магазин
+$('fUrl').addEventListener('change', () => {
+  const url = $('fUrl').value.trim();
+  if (!/^https?:/i.test(url)) return;
+  if (!$('fName').value.trim()){
+    const guess = slugToName(url);
+    if (guess) $('fName').value = guess;
+  }
+  if (!$('fStore').value.trim()){
+    try {
+      const host = new URL(url).hostname.replace(/^www\./, '');
+      const known = [[/ozon/, 'Ozon'], [/wildberries/, 'Wildberries'], [/market\.yandex/, 'Яндекс Маркет'],
+                     [/goldapple/, 'Золотое яблоко'], [/dns-shop/, 'DNS'], [/aliexpress/, 'AliExpress']];
+      const hit = known.find(k => k[0].test(host));
+      $('fStore').value = hit ? hit[1] : host;
+    } catch (e) {}
+  }
+});
+
+// выбрали файл — сразу показываем и запоминаем на загрузку
+$('fFile').addEventListener('change', () => {
+  const file = $('fFile').files && $('fFile').files[0];
+  if (!file) return;
+  if (!/^image\//.test(file.type)){ showError('Это не картинка. Нужен JPEG, PNG, WebP или GIF.'); return; }
+  if (file.size > 6 * 1024 * 1024){ showError('Файл больше 6 МБ — выбери поменьше.'); return; }
+  pendingPhoto = file;
+  const url = URL.createObjectURL(file);
+  setPhotoView(url, 'будет загружено при сохранении');
+  showError('');
+});
+
+$('clearPhoto').addEventListener('click', () => {
+  pendingPhoto = null;
+  photoId = '';
+  $('fFile').value = '';
+  $('fImg2').value = '';
+  setPhotoView('', '');
+});
+
+$('fImg2').addEventListener('change', () => {
+  const v = $('fImg2').value.trim();
+  if (v) setPhotoView(v, 'ссылка на фото');
+});
+
+$('cancelBtn').addEventListener('click', closeDialog);
+dlg.addEventListener('click', e => { if (e.target === dlg) closeDialog(); });
+document.addEventListener('keydown', e => {
+  if (e.key !== 'Escape') return;
+  if (dlg.classList.contains('fallback-open')) closeDialog();
+  if (shareDlg.classList.contains('fallback-open')) closeShareDialog();
+});
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('fName').value.trim();
+  if (!name){ showError('Впиши название — или вставь ссылку, и оно подтянется.'); $('fName').focus(); return; }
+  const url = $('fUrl').value.trim();
+  if (url && !/^https?:/i.test(url)){ showError('Ссылка должна начинаться с http:// или https://'); return; }
+
+  const btn = $('saveBtn');
+  btn.disabled = true;
+  try {
+    if (pendingPhoto){
+      btn.textContent = 'Загружаю фото…';
+      const photo = await uploadPhoto(pendingPhoto);
+      photoId = photo.id;
+      pendingPhoto = null;
+    }
+    const data = {
+      name,
+      price: $('fPrice').value.trim(),
+      store: $('fStore').value.trim(),
+      url,
+      note: $('fNote').value.trim(),
+      priority: Number($('fPriority').value) || 2,
+      photo_id: photoId,
+      img: photoId ? '' : $('fImg2').value.trim(),
+    };
+    if (editingId) await api('PATCH', '/items?id=' + editingId, data);
+    else await api('POST', '/items', data);
+    closeDialog();
+    await reload();
+  } catch (err){
+    showError(err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Сохранить';
+  }
+});
+
+/* ---------- ссылка для друзей ---------- */
+function shareLinkText(){
+  return location.origin + '/v/' + list.code;
+}
+
+function showShare(){
+  $('shareUrl').value = shareLinkText();
+  if (canModal){ try { shareDlg.showModal(); } catch (e){ openFallback(shareDlg); } }
+  else openFallback(shareDlg);
+}
+
+function closeShareDialog(){
+  if (canModal && shareDlg.open){ try { shareDlg.close(); return; } catch (e) {} }
+  closeFallback(shareDlg);
+}
+
+$('closeShare').addEventListener('click', closeShareDialog);
+$('openShare').addEventListener('click', () => window.open(shareLinkText(), '_blank', 'noopener'));
+$('copyShare').addEventListener('click', async () => {
+  const url = shareLinkText();
+  const btn = $('copyShare');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      await navigator.clipboard.writeText(url);
+      btn.textContent = 'Скопировано';
+      setTimeout(() => { btn.textContent = 'Скопировать'; }, 1500);
+      return;
+    }
+    throw new Error('нет доступа к буферу');
+  } catch (e){
+    $('shareUrl').select();
+    document.execCommand && document.execCommand('copy');
+    btn.textContent = 'Скопировано';
+    setTimeout(() => { btn.textContent = 'Скопировать'; }, 1500);
+  }
+});
+
+/* ---------- название списка ---------- */
+async function editTitle(){
+  const title = prompt('Название вишлиста:', list.title || '');
+  if (title === null) return;
+  const note = prompt('Заметка для друзей (можно оставить пустой):', list.note || '');
+  if (note === null) return;
+  try {
+    await api('PATCH', '/list', { title: title.trim() || 'Вишлист', note: note.trim() });
+    await reload();
+    toast('Сохранено');
+  } catch (e){ toast('Не удалось сохранить: ' + e.message, true); }
+}
+
+async function wipeList(){
+  if (!confirm('Удалить список целиком? Ссылка перестанет работать, подарки исчезнут.')) return;
+  if (!confirm('Точно удалить? Это нельзя отменить.')) return;
+  try {
+    await api('DELETE', '/list');
+    try { localStorage.removeItem(TOKEN_KEY); } catch (e) {}
+    token = '';
+    list = null;
+    stats = null;
+    render();
+    toast('Список удалён');
+  } catch (e){ toast('Не удалось удалить: ' + e.message, true); }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>

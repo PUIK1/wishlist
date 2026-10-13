@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вишлист</title>
+<style>
+  :root{
+    --bg:#e2f4dd; --surface:#fff; --text:#33482f; --muted:#6f8c6b;
+    --accent:#8e6fc4; --accent-deep:#6f52a8; --accent-2:#8fd39a; --leaf:#b7e3ae;
+    --p1:#c9605f; --p2:#c99a3f; --p3:#6f8c6b;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;min-height:100vh;color:var(--text);
+    font:15px/1.5 ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    background:
+      radial-gradient(1150px 660px at 4% -16%, rgba(143,211,154,.62), transparent 66%),
+      radial-gradient(920px 580px at 106% -8%, rgba(183,227,174,.66), transparent 62%),
+      radial-gradient(860px 600px at 50% 112%, rgba(143,211,154,.42), transparent 64%),
+      var(--bg);
+    background-attachment:fixed;
+  }
+  .wrap{max-width:1100px;margin:0 auto;padding:40px 20px 80px}
+  header{text-align:center;margin-bottom:26px}
+  h1{
+    margin:0 0 8px;font-size:clamp(26px,5vw,42px);font-weight:800;letter-spacing:-.02em;
+    background:linear-gradient(100deg,#7f5fb8 5%,#5f9c72 55%,#8fd39a 95%);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .meta{color:var(--muted);font-size:14px}
+  .note{
+    max-width:680px;margin:14px auto 0;padding:11px 18px;border-radius:14px;
+    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.7);font-size:13.5px;
+  }
+  .grid{display:grid;gap:20px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));margin-top:26px}
+  .card{perspective:1200px;position:relative}
+  .inner{position:relative;transition:transform .6s cubic-bezier(.4,.15,.2,1);transform-style:preserve-3d}
+  .card.flipped .inner{transform:rotateY(180deg)}
+  .face{
+    border-radius:18px;border:1px solid rgba(255,255,255,.9);background:var(--surface);
+    box-shadow:0 12px 28px rgba(64,102,66,.16);overflow:hidden;
+    backface-visibility:hidden;-webkit-backface-visibility:hidden;
+  }
+  .face.front{cursor:pointer;display:flex;flex-direction:column;min-height:320px}
+  .face.back{
+    position:absolute;inset:0;transform:rotateY(180deg);padding:18px;
+    display:flex;flex-direction:column;gap:10px;
+    background:linear-gradient(155deg,#cdb9f0,#e2d8f6 32%,#eef7e4 68%,#c9e8c4);
+  }
+  .thumb{flex:1;padding:14px;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#fbfdfa,#f2f8ef)}
+  .frame{
+    width:100%;height:100%;min-height:190px;display:flex;align-items:center;justify-content:center;
+    padding:9px;border-radius:14px;overflow:hidden;
+    background:linear-gradient(160deg,rgba(142,111,196,.22),rgba(142,111,196,.13));
+    border:2px solid rgba(142,111,196,.5);
+  }
+  .frame img{max-width:100%;max-height:230px;object-fit:contain;border-radius:8px;display:block}
+  .frame .nofoto{color:var(--muted);font-size:12.5px;text-align:center;padding:10px}
+  .bar{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 14px;border-top:1px solid rgba(56,92,60,.12);background:linear-gradient(180deg,#fff,#f4faf2)}
+  .bar .name{font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .bar .price{color:var(--accent-deep);font-weight:800;font-size:15px;white-space:nowrap}
+  .back h3{margin:0;font-size:17px;color:#332a4d}
+  .back .price{color:#5b3f96;font-weight:800;font-size:22px}
+  .back .note{font-size:13.5px;color:#4f5a63;flex:1}
+  .store{
+    align-self:flex-start;font-size:12.5px;color:#3f6b4b;padding:5px 10px;border-radius:999px;
+    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.7);
+  }
+  .open{
+    display:block;text-align:center;text-decoration:none;padding:10px;border-radius:11px;
+    background:linear-gradient(135deg,#a184d6,#8e6fc4);color:#fff;font-weight:600;
+  }
+  .hint{font-size:11px;color:#6b5b8a;text-align:center;border-top:1px solid rgba(142,111,196,.22);padding-top:8px}
+  .badge{
+    position:absolute;top:10px;left:10px;z-index:3;padding:5px 10px;border-radius:999px;
+    font-size:11px;font-weight:700;background:rgba(255,255,255,.94);
+    border:1px solid rgba(143,211,154,.85);color:#3f7355;
+  }
+  .prio{
+    position:absolute;top:10px;right:10px;z-index:3;font-size:11px;font-weight:700;
+    padding:5px 9px;border-radius:999px;background:rgba(255,255,255,.94);
+  }
+  .prio.p1{color:var(--p1);border:1px solid rgba(201,96,95,.6)}
+  .prio.p2{color:var(--p2);border:1px solid rgba(201,154,63,.6)}
+  .prio.p3{color:var(--p3);border:1px solid rgba(111,140,107,.5)}
+  .card.taken .frame img,.card.taken .frame .nofoto{filter:grayscale(.85);opacity:.55}
+  .card.taken .bar .name{text-decoration:line-through;color:var(--muted)}
+  .empty{
+    text-align:center;padding:60px 20px;border:1px dashed rgba(143,211,154,.85);
+    border-radius:22px;color:var(--muted);background:rgba(255,255,255,.6);margin-top:26px;
+  }
+  .loading{text-align:center;color:var(--muted);padding:60px 0}
+  .err{
+    max-width:520px;margin:60px auto;padding:22px;border-radius:18px;text-align:center;
+    background:rgba(255,255,255,.85);border:1px solid rgba(201,96,95,.4);
+  }
+  @media (max-width:520px){
+    .wrap{padding:24px 14px 60px}
+    .grid{grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:14px}
+    .face.front{min-height:250px}
+  }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <div class="loading" id="loading">Открываю вишлист…</div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+const wrap = document.getElementById('wrap');
+const code = (location.pathname.match(/\/v\/([a-z0-9]+)/i) || [])[1] || '';
+
+const esc = s => String(s == null ? '' : s)
+  .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+// цену показываем со знаком рубля, если написали просто число
+function formatPrice(v){
+  let s = String(v == null ? '' : v).trim();
+  if (!s) return '';
+  if (/[₽$€£¥]|руб|р\.|rub|usd|eur/i.test(s)) return s;
+  const plain = s.replace(/\s/g, '');
+  if (/^\d{3,}$/.test(plain)) s = plain.replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  else if (/^\d+([.,]\d{1,2})?$/.test(plain)) s = plain.replace('.', ',');
+  return s + ' ₽';
+}
+
+const PRIO = { 1: ['Очень хочу', 'p1'], 2: ['Хочу', 'p2'], 3: ['Было бы неплохо', 'p3'] };
+
+function placeholder(text){
+  return `<div class="nofoto">${esc(text)}</div>`;
+}
+
+function cardHtml(it){
+  const price = formatPrice(it.price);
+  const prio = PRIO[it.priority] || PRIO[2];
+  const photo = it.img
+    ? `<img src="${esc(it.img)}" alt="${esc(it.name)}" loading="lazy" referrerpolicy="no-referrer"
+         onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'nofoto',textContent:'Фото не открылось'}))">`
+    : placeholder('Фото не подтянулось');
+
+  return `
+  <div class="card${it.taken ? ' taken' : ''}" data-id="${it.id}">
+    ${it.taken ? '<span class="badge">УЖЕ ПОДАРЕНО</span>' : ''}
+    <span class="prio ${prio[1]}">${esc(prio[0])}</span>
+    <div class="inner">
+      <div class="face front">
+        <div class="thumb"><div class="frame">${photo}</div></div>
+        <div class="bar">
+          <span class="name">${esc(it.name)}</span>
+          ${price ? `<span class="price">${esc(price)}</span>` : ''}
+        </div>
+      </div>
+      <div class="face back">
+        <h3>${esc(it.name)}</h3>
+        ${price ? `<div class="price">${esc(price)}</div>` : ''}
+        ${it.store ? `<span class="store">🛍 ${esc(it.store)}</span>` : ''}
+        <div class="note">${esc(it.note || '')}</div>
+        ${it.url ? `<a class="open" href="${esc(it.url)}" target="_blank" rel="noopener noreferrer">Открыть сайт</a>` : ''}
+        <div class="hint">нажми, чтобы вернуть карточку</div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function render(list){
+  const items = list.items || [];
+  const free = items.filter(i => !i.taken).length;
+
+  const noteHtml = list.note ? `<div class="note">${esc(list.note)}</div>` : '';
+  const dateHtml = list.event_date ? ` · ${esc(list.event_date)}` : '';
+
+  wrap.innerHTML = `
+    <header>
+      <h1>${esc(list.title || 'Вишлист')}</h1>
+      <div class="meta">Подарков: <b>${items.length}</b>${items.length ? ` · свободно: <b>${free}</b>` : ''}${dateHtml}</div>
+      ${noteHtml}
+    </header>
+    ${items.length
+      ? `<div class="grid">${items.map(cardHtml).join('')}</div>`
+      : '<div class="empty"><h2>Список пока пуст</h2><p>Павлик ещё не добавил подарки.</p></div>'}
+  `;
+
+  wrap.querySelectorAll('.card').forEach(card => {
+    const inner = card.querySelector('.inner');
+    const front = card.querySelector('.front');
+    const back = card.querySelector('.back');
+    front.addEventListener('click', () => card.classList.toggle('flipped'));
+    back.addEventListener('click', e => {
+      if (e.target.closest('a')) return;      // ссылка на магазин работает как ссылка
+      card.classList.remove('flipped');
+    });
+  });
+}
+
+function showError(text){
+  wrap.innerHTML = `<div class="err"><h2>Не получилось открыть</h2><p>${esc(text)}</p></div>`;
+}
+
+async function boot(){
+  if (!code){ showError('В ссылке нет кода списка.'); return; }
+  try {
+    const res = await fetch('/api/public/' + encodeURIComponent(code), { headers: { accept: 'application/json' } });
+    if (res.status === 404){ showError('Такого списка нет — возможно, ссылка устарела.'); return; }
+    if (!res.ok){ showError('Сервер ответил ошибкой ' + res.status + '.'); return; }
+    const data = await res.json();
+    render(data.list);
+  } catch (e){
+    showError('Нет связи с сервером. Проверь интернет и обнови страницу.');
+  }
+}
+
+boot();
+})();
+</script>
+</body>
+</html>
