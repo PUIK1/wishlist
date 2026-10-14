@@ -115,6 +115,11 @@
     position:relative;
     perspective:1200px;
     -webkit-perspective:1200px;
+    /* Высоту задаём из кода: оборот содержит много (название, цена, магазин,
+       кнопки, бронь), и при пропорции 3/4 он выше карточки. Тогда нижняя
+       кнопка «Снять отметку» выходила за край, и нажатие по ней попадало
+       мимо. Пропорция остаётся как запасная для случая, когда измерить
+       не удалось (например, до отрисовки). */
     aspect-ratio:3/4;
     animation:pop .35s backwards;
   }
@@ -143,27 +148,19 @@
     box-shadow:var(--shadow);
   }
 
-  /* Смена сторон идёт ПЛАВНО, всё время поворота (выбран вариант «В»).
-     Чтобы стороны не просвечивали друг через друга, вторая сторона
-     начинает проявляться с небольшой задержкой: к моменту, когда она
-     станет заметной, первая уже почти растворилась.
-     Поворот идёт 0.62s, поэтому фейд растянут на 0.33s. */
-  .face.front{opacity:1;visibility:visible;transition:opacity .33s linear}
-  .card.flipped .face.front{
-    opacity:0;visibility:hidden;
-    transition:opacity .33s linear, visibility 0s linear .33s;
-  }
+  /* Смена сторон.
 
-  /* оборот повёрнут и ждёт своей очереди */
-  .face.back{
-    opacity:0;visibility:hidden;
-    transition:opacity .33s linear, visibility 0s linear .33s;
-    transform:rotateY(180deg) translateZ(0);
-  }
-  .card.flipped .face.back{
-    opacity:1;visibility:visible;
-    transition:opacity .33s linear .14s, visibility 0s linear .14s;
-  }
+     САМОЕ ВАЖНОЕ. Раньше показ сторон задавали правила ниже:
+     «.card.flipped .face.front» и «.card.flipped .face.back». В браузере
+     выяснилось, что они НЕ срабатывают: лицевая сторона оставалась
+     видимой, перекрывала оборот, и нажатия по кнопкам оборота
+     («Снять отметку») уходили в пустоту.
+
+     Теперь видимостью сторон управляет КОД (функция showFace): он ставит
+     стили прямо на стороны. Здесь задаём только переход, а сами значения
+     видимости — из кода. Тогда никакое правило их не перебьёт. */
+  .face{transition:opacity .33s linear}
+  .face.back{transform:rotateY(180deg) translateZ(0)}
 
   .card:hover .face{box-shadow:var(--shadow-lg)}
 
@@ -232,20 +229,35 @@
   /* вся оборотная сторона — кнопка «вернуть» */
   .back-flip{
     appearance:none;border:none;background:transparent;font:inherit;color:inherit;
-    text-align:left;cursor:pointer;width:100%;height:100%;
-    padding:18px;display:flex;flex-direction:column;gap:10px;
+    text-align:left;cursor:pointer;
+    width:100%;height:100%;
+    box-sizing:border-box;              /* отступы ВНУТРИ высоты, иначе содержимое вылезает */
+    padding:12px;display:flex;flex-direction:column;gap:6px;
+    overflow:hidden;                    /* ничего не выходит за карточку */
   }
   .back-flip:focus-visible{outline:2px solid var(--accent);outline-offset:-4px;border-radius:var(--radius)}
-  .back h3{margin:0;font-size:18px;line-height:1.25;color:#332a4d}
-  .back .price{color:#5b3f96;font-weight:800;font-size:23px;letter-spacing:-.01em}
-  .back .desc{color:#4f5a63;font-size:13.5px;flex:1;overflow:auto;white-space:pre-wrap}
-  .store{
-    display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:#3f6b4b;
-    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.66);
-    padding:5px 10px;border-radius:999px;align-self:flex-start;
-    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  .back h3{margin:0;font-size:15px;line-height:1.25;color:#332a4d}
+  .back .price{color:#5b3f96;font-weight:800;font-size:19px;letter-spacing:-.01em}
+
+  /* ВАЖНО. Описание раньше растягивалось и выдавливало кнопки ЗА КРАЙ
+     карточки. Тогда нижние кнопки (бронь и «вернуть») оказывались вне
+     карточки — нажатия по ним попадали на лицевую сторону и не работали.
+
+     Теперь описание сжимается и прокручивается, а все кнопки имеют
+     постоянную высоту и не сжимаются — они всегда внутри карточки. */
+  .back .desc{
+    color:#4f5a63;font-size:12.5px;line-height:1.4;
+    flex:1 1 0;min-height:0;overflow:auto;white-space:pre-wrap;
+    padding-right:2px;
   }
-  .back-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}
+  .store{
+    display:inline-flex;align-items:center;gap:7px;font-size:12px;color:#3f6b4b;
+    border:1px solid rgba(143,211,154,.9);background:rgba(255,255,255,.66);
+    padding:4px 10px;border-radius:999px;align-self:flex-start;
+    max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+    flex:0 0 auto;
+  }
+  .back-actions{display:flex;gap:8px;flex-wrap:wrap;flex:0 0 auto}
   .back-actions .btn{
     flex:1;justify-content:center;
     background:rgba(255,255,255,.88);border-color:rgba(142,111,196,.35);
@@ -257,8 +269,8 @@
   .link-btn{text-decoration:none}
 
   .back-hint{
-    font-size:11px;color:#6b5b8a;text-align:center;
-    border-top:1px solid rgba(142,111,196,.22);padding-top:8px;margin-top:auto;
+    font-size:10px;color:#6b5b8a;text-align:center;
+    padding-top:5px;flex:0 0 auto;
   }
 
   /* badges & controls */
@@ -299,7 +311,13 @@
     font-size:12.5px;color:#4a3a78;font-weight:600;
   }
 
-  /* полоса состояния: показывает, что база недоступна, и даёт кнопку «Обновить» */
+  /* Полоса состояния: показывает, что база недоступна, и даёт кнопку «Обновить».
+
+     ВАЖНО: у неё display:flex, а он ПЕРЕБИВАЕТ служебный атрибут hidden.
+     Из-за этого полоса висела пустой, хотя должна была быть скрыта.
+     Поэтому hidden описан явно и с усилением. */
+  [hidden]{display:none !important}
+
   .statusbar{
     margin:14px auto 0;max-width:620px;
     display:flex;align-items:center;gap:12px;justify-content:center;flex-wrap:wrap;
@@ -321,20 +339,20 @@
 
   /* ---------------- бронь на обороте карточки ---------------- */
   .claim{
-    margin-top:auto;
+    flex:0 0 auto;                 /* не сжимается — всегда внутри карточки */
     border-top:1px solid rgba(142,111,196,.22);
-    padding-top:10px;
-    display:flex;flex-direction:column;gap:8px;
+    padding-top:7px;
+    display:flex;flex-direction:column;gap:6px;
   }
   .claim-note{
-    font-size:12.5px;color:#4f5a63;line-height:1.4;
+    font-size:11.5px;color:#4f5a63;line-height:1.35;
   }
   .claim-note b{color:#3f2f6b}
   .claim-row{display:flex;gap:6px;align-items:stretch}
   .claim-name{
     flex:1;min-width:0;
-    font:inherit;font-size:13px;
-    padding:7px 10px;border-radius:9px;
+    font:inherit;font-size:12.5px;
+    padding:6px 9px;border-radius:9px;
     border:1px solid rgba(142,111,196,.45);
     background:rgba(255,255,255,.92);color:#332a4d;
   }
@@ -343,11 +361,11 @@
     border-color:#c9605f;
     box-shadow:0 0 0 3px rgba(201,96,95,.18);
   }
-  .claim .btn{white-space:nowrap}
+  .claim .btn{white-space:nowrap;padding-top:6px;padding-bottom:6px}
   .claim.taken-by .claim-note{
     border:1px solid rgba(142,111,196,.35);
     background:rgba(255,255,255,.75);
-    border-radius:10px;padding:7px 10px;
+    border-radius:10px;padding:6px 9px;
   }
 
   .icon-btn{
@@ -707,7 +725,7 @@
 
    При каждой правке страницы увеличивай номер ниже.
    ============================================================ */
-const BUILD = '2026-10-14-check2';
+const BUILD = '2026-10-14-fix7';
 const BUILD_URL_MARK = 'v=' + BUILD;
 
 try {
@@ -1441,6 +1459,68 @@ async function loadFromCloud(){
    ============================================================ */
 let reservations = new Map();          // item_id -> имя забронировавшего
 let flipCount = 0;                      // сколько раз переворачивали карточки (для проверки)
+let pendingFit = [];                    // карточки, которым надо подогнать высоту
+
+/* ============================================================
+   Подгонка высоты карточки
+
+   Оборот содержит много: название, цена, магазин, кнопки, бронь.
+   При пропорции 3/4 он бывает ВЫШЕ карточки, и нижняя кнопка
+   («Снять отметку») выходила за край — нажатие по ней попадало
+   на лицевую сторону и не срабатывало.
+
+   Поэтому измеряем содержимое оборота и задаём карточке нужную высоту.
+   ============================================================ */
+function fitCards(){
+  const cards = pendingFit;
+  pendingFit = [];
+
+  // Подгонка необязательна: если браузер не умеет измерять (или это
+  // упрощённая среда), просто ничего не делаем — карточки останутся
+  // с обычной пропорцией. Раньше сбой здесь ломал всю страницу.
+  if (typeof getComputedStyle !== 'function') return;
+
+  cards.forEach(card => {
+    try {
+      if (!card || !card.querySelector || typeof card.getBoundingClientRect !== 'function') return;
+      const back = card.querySelector('.back-flip');
+      const inner = card.querySelector('.card-inner');
+      if (!back || !inner) return;
+      if (typeof back.getBoundingClientRect !== 'function') return;
+
+      // временно показываем оборот, чтобы его можно было измерить
+      const keepFlipped = card.classList.contains('flipped');
+      if (!keepFlipped){
+        card.style.visibility = 'hidden';
+        inner.style.transform = 'rotateY(180deg)';
+      }
+
+      const cs = getComputedStyle(back);
+      const pad = parseFloat(cs.paddingTop) + parseFloat(cs.paddingBottom);
+      const gap = parseFloat(cs.rowGap || cs.gap) || 0;
+      const kids = back.children ? [...back.children] : [];
+      let sum = 0, count = 0;
+      kids.forEach(child => {
+        if (!child || typeof child.getBoundingClientRect !== 'function') return;
+        const h = child.getBoundingClientRect().height;
+        if (child.classList && child.classList.contains('desc')) return;  // описание сжимается
+        if (h > 0){ sum += h; count++; }
+      });
+      // высота, при которой все части помещаются, плюс немного на описание
+      const need = Math.ceil(pad + sum + gap * Math.max(0, count - 1) + 40);
+
+      const now = card.getBoundingClientRect().height;
+      if (need > now + 2) card.style.minHeight = need + 'px';
+
+      if (!keepFlipped){
+        inner.style.transform = '';
+        card.style.visibility = '';
+      }
+    } catch (e) {
+      console.warn('Не удалось подогнать высоту карточки:', e);
+    }
+  });
+}
 
 const RES_CACHE_KEY = 'wishlist.reservations';
 
@@ -2327,6 +2407,11 @@ function render(){
     $('exportHtmlBtn').disabled = items.length === 0;
   }
   applyLock();          // замок решает, доступна ли панель
+
+  // Подгоняем высоту карточек по содержимому оборота. Делаем после отрисовки,
+  // потому что раньше измерить нечего. Если измерение не удалось — карточки
+  // останутся с обычной пропорцией, то есть хуже не станет.
+  try { fitCards(); } catch (e) { console.warn('подгонка высоты не удалась:', e); }
 }
 
 /* Гостевой режим: гость открыл чужую ссылку — правки ему не положены вообще */
@@ -2656,8 +2741,17 @@ function cardEl(it, idx){
     const undo = claimBox.querySelector('.claim-undo');
     if (undo) undo.addEventListener('click', async e => {
       e.stopPropagation();
-      if (!confirm('Снять отметку «уже подарят»?')) return;
-      if (await unreserveItem(it)) render();
+      // Без системного окна подтверждения: браузеры их часто блокируют,
+      // и тогда кнопка выглядела нерабочей. Снимаем сразу.
+      undo.disabled = true;
+      undo.textContent = 'Снимаю…';
+      const okDone = await unreserveItem(it);
+      if (okDone){
+        render();
+      } else {
+        undo.disabled = false;
+        undo.textContent = 'Снять отметку';
+      }
     });
   } else {
     // свободен: предлагаем отметить
@@ -2691,10 +2785,16 @@ function cardEl(it, idx){
 
   backFlip.appendChild(claimBox);
 
-  const backHint = document.createElement('div');
-  backHint.className = 'back-hint';
-  backHint.textContent = 'нажми, чтобы вернуть карточку';
-  backFlip.appendChild(backHint);
+  /* Подсказку «нажми, чтобы вернуть карточку» убрали.
+
+     Она занимала место, которого на обороте и без неё не хватает: из-за
+     неё содержимое вылезало за нижний край карточки, и нижние кнопки
+     («Снять отметку») оказывались ЗА карточкой — нажатия по ним попадали
+     на лицевую сторону и не срабатывали.
+
+     Вместо подсказки повесим пояснение на саму кнопку оборота: наведи
+     мышью — увидишь «нажми, чтобы вернуть карточку». */
+  backFlip.title = 'Нажми, чтобы вернуть карточку';
 
   back.appendChild(backFlip);
 
@@ -2708,16 +2808,60 @@ function cardEl(it, idx){
      и у друзей. Раньше он стоял только у хозяина, а гость выходил из функции
      раньше — у друзей карточки не переворачивались.
 
-     Логика в одну строку: нажали по карточке — состояние меняется на
-     противоположное. Никаких проверок «перевёрнута ли уже», никаких
-     условий по сторонам: именно из-за них карточка застревала.
+     ВАЖНО про показ сторон. Раньше стороны переключались правилами в стилях
+     (.card.flipped .face.front). В браузере выяснилось, что это правило
+     НЕ применялось: лицевая сторона оставалась видимой и перекрывала оборот,
+     поэтому нажатия по кнопкам оборота уходили в пустоту.
 
-     Живой щелчок приходит на элемент внутри карточки и всплывает до неё —
-     поэтому проверяем только одно: не нажали ли на что-то рабочее. */
+     Поэтому показом сторон управляем ПРЯМО ИЗ КОДА: ставим стили на сами
+     стороны. Так не зависит ни от правил, ни от их порядка. */
+  function setVis(el, opacity, visibility){
+    if (!el || !el.style) return;
+    // setProperty есть не везде (в упрощённых средах его нет) — подстрахуемся
+    if (typeof el.style.setProperty === 'function'){
+      el.style.setProperty('opacity', opacity, 'important');
+      el.style.setProperty('visibility', visibility, 'important');
+    } else {
+      el.style.opacity = opacity;
+      el.style.visibility = visibility;
+    }
+  }
+
+  function showFace(flipped){
+    // Ставим значения прямо на стороны. Раньше показ задавали правила
+    // стилей, но в браузере выяснилось, что они не срабатывают: лицевая
+    // сторона оставалась видимой и перекрывала оборот.
+    if (flipped){
+      setVis(front, '0', 'hidden');
+      setVis(back, '1', 'visible');
+    } else {
+      setVis(front, '1', 'visible');
+      setVis(back, '0', 'hidden');
+    }
+  }
+  showFace(false);
+
   card.addEventListener('click', function(e){
     const t = e.target;
-    if (t && t.closest && t.closest('a, button, input, textarea, select')) return;
-    card.classList.toggle('flipped');
+
+    /* ВАЖНО. Оборотная сторона — это сама кнопка «вернуть карточку»
+       (.back-flip), и вместе с ней кнопками являются её надписи и описание.
+       Раньше проверка «не нажали ли на что-то рабочее» считала их рабочей
+       кнопкой и ОТКАЗЫВАЛАСЬ переворачивать карточку. Из-за этого карточка
+       не возвращалась: класс flipped ставился один раз и больше не менялся.
+
+       Поэтому кнопку оборота из проверки исключаем — она и есть переворот.
+       А вот ссылки, «Копировать», поле имени и «Я это подарю» — рабочие,
+       их не трогаем. */
+    const inBackFlip = !!(t && t.closest && t.closest('.back-flip'));
+    const control = t && t.closest ? t.closest('a, button, input, textarea, select') : null;
+    const isBackFlipItself = control && control.classList && control.classList.contains('back-flip');
+    if (control && !isBackFlipItself) return;
+    if (inBackFlip && control && !isBackFlipItself) return;
+
+    const now = !card.classList.contains('flipped');
+    card.classList.toggle('flipped', now);
+    showFace(now);
     noteFlip();
   });
 
@@ -2789,8 +2933,11 @@ function cardEl(it, idx){
   card.appendChild(inner);
 
   /* Обработчик переворота уже поставлен выше — до разделения на хозяина
-     и гостя. Здесь его НЕ повторяем: два обработчика на одном нажатии
-     переворачивали бы карточку и тут же возвращали её обратно. */
+     и гостя. Здесь его НЕ повторяем. */
+
+  // Высоту подгоняем по содержимому оборота — но только когда карточка
+  // уже стоит на странице и её можно измерить.
+  pendingFit.push(card);
 
   return card;
 }
