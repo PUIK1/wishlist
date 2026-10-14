@@ -115,12 +115,18 @@
     position:relative;
     perspective:1200px;
     -webkit-perspective:1200px;
-    /* Высоту задаём из кода: оборот содержит много (название, цена, магазин,
-       кнопки, бронь), и при пропорции 3/4 он выше карточки. Тогда нижняя
-       кнопка «Снять отметку» выходила за край, и нажатие по ней попадало
-       мимо. Пропорция остаётся как запасная для случая, когда измерить
-       не удалось (например, до отрисовки). */
-    aspect-ratio:3/4;
+
+    /* Ширина строго по колонке сетки.
+
+       ВАЖНО. Раньше здесь стояла пропорция 3/4 (aspect-ratio). Когда я стал
+       подгонять высоту карточки по содержимому оборота, браузер высчитывал
+       ширину ИЗ высоты — и карточки становились ШИРЕ колонки (237 px при
+       колонке 220 px). Из-за этого они налезали друг на друга на телефоне.
+
+       Теперь ширину задаёт сетка, а высоту — содержимое. Пропорцию держит
+       лицевая сторона через свою наименьшую высоту. */
+    width:100%;
+    min-width:0;
     animation:pop .35s backwards;
   }
   @keyframes pop{from{opacity:0;transform:translateY(14px) scale(.97)}to{opacity:1;transform:none}}
@@ -147,6 +153,11 @@
     -webkit-transform:translateZ(0);
     box-shadow:var(--shadow);
   }
+
+  /* Наименьшая высота карточки: чтобы даже с пустым списком карточка
+     выглядела как карточка, а не как полоска. Высоту задаёт код (fitCards),
+     подгоняя её под содержимое оборота. */
+  .card{min-height:300px}
 
   /* Смена сторон.
 
@@ -725,7 +736,7 @@
 
    При каждой правке страницы увеличивай номер ниже.
    ============================================================ */
-const BUILD = '2026-10-14-fix7';
+const BUILD = '2026-10-14-fix9';
 const BUILD_URL_MARK = 'v=' + BUILD;
 
 try {
@@ -2706,7 +2717,7 @@ function cardEl(it, idx){
 
   const copyBtn = document.createElement('button');
   copyBtn.type = 'button';
-  copyBtn.className = 'btn ghost small';
+  copyBtn.className = 'btn ghost small copy-link';
   copyBtn.textContent = 'Копировать';
   copyBtn.addEventListener('click', async e => {
     e.stopPropagation();
@@ -2841,29 +2852,9 @@ function cardEl(it, idx){
   }
   showFace(false);
 
-  card.addEventListener('click', function(e){
-    const t = e.target;
-
-    /* ВАЖНО. Оборотная сторона — это сама кнопка «вернуть карточку»
-       (.back-flip), и вместе с ней кнопками являются её надписи и описание.
-       Раньше проверка «не нажали ли на что-то рабочее» считала их рабочей
-       кнопкой и ОТКАЗЫВАЛАСЬ переворачивать карточку. Из-за этого карточка
-       не возвращалась: класс flipped ставился один раз и больше не менялся.
-
-       Поэтому кнопку оборота из проверки исключаем — она и есть переворот.
-       А вот ссылки, «Копировать», поле имени и «Я это подарю» — рабочие,
-       их не трогаем. */
-    const inBackFlip = !!(t && t.closest && t.closest('.back-flip'));
-    const control = t && t.closest ? t.closest('a, button, input, textarea, select') : null;
-    const isBackFlipItself = control && control.classList && control.classList.contains('back-flip');
-    if (control && !isBackFlipItself) return;
-    if (inBackFlip && control && !isBackFlipItself) return;
-
-    const now = !card.classList.contains('flipped');
-    card.classList.toggle('flipped', now);
-    showFace(now);
-    noteFlip();
-  });
+  /* Переворот и кнопки оборота обрабатываются ОДНИМ приёмом на сетке
+     (см. wireGridClicks). Здесь обработчика нет: он терялся при перерисовке
+     списка — из-за этого кнопки «переставали нажиматься». */
 
   /* Счётчик переворотов — видимая проверка на экране.
      Если человек нажимает, а счётчик не растёт, значит нажатие до карточки
@@ -3384,6 +3375,13 @@ async function boot(){
     const lockBtn = $('lockBtn');
     if (lockBtn) lockBtn.addEventListener('click', lockNow);
 
+    /* Нажатия на карточках подключаем СРАЗУ, до всех проверок и выходов.
+
+       ВАЖНО: раньше этот вызов стоял ниже выхода для гостя. Из-за этого
+       у друзей (а они и есть гости) нажатия не обрабатывались вообще:
+       карточки не переворачивались, бронь не ставилась. */
+    wireGridClicks();
+
     // форма входа в правку
     const loginForm = $('loginForm');
     if (loginForm) loginForm.addEventListener('submit', e => { e.preventDefault(); doLogin(); });
@@ -3558,9 +3556,130 @@ function hideStatus(){
   if (bar) bar.hidden = true;
 }
 
+/* ============================================================
+   Нажатия на карточках — через общий приём на сетке
+
+   Раньше обработчики висели на каждой карточке. При перерисовке списка
+   карточки создаются заново, и вместе с ними теряются обработчики —
+   из-за этого «бронь не ставится» и «кнопки не нажимаются».
+
+   Теперь слушаем нажатие ОДИН РАЗ на всей сетке и смотрим, куда оно
+   пришлось. Так обработчик не теряется никогда, сколько бы раз список
+   ни перерисовывался.
+   ============================================================ */
+function wireGridClicks(){
+  if (!grid || grid._wiredClicks) return;
+  grid._wiredClicks = true;
+
+  grid.addEventListener('click', async e => {
+    const t = e.target;
+    if (!t || !t.closest) return;
+
+    // 1) «Снять отметку» — снимаем бронь
+    const undo = t.closest('.claim-undo');
+    if (undo){
+      e.stopPropagation();
+      const card = undo.closest('.card');
+      const item = card ? itemFromCard(card) : null;
+      if (!item) return;
+      undo.disabled = true;
+      undo.textContent = 'Снимаю…';
+      const done = await unreserveItem(item);
+      if (done) render();
+      else { undo.disabled = false; undo.textContent = 'Снять отметку'; }
+      return;
+    }
+
+    // 2) «Я это подарю» — ставим бронь
+    const go = t.closest('.claim-go');
+    if (go){
+      e.stopPropagation();
+      const card = go.closest('.card');
+      const item = card ? itemFromCard(card) : null;
+      if (!item) return;
+      const inp = card.querySelector('.claim-name');
+      const name = inp ? String(inp.value || '').trim() : '';
+      if (!name){
+        if (inp){ inp.focus(); inp.classList.add('need'); }
+        return;
+      }
+      rememberName(name);
+      go.disabled = true;
+      go.textContent = 'Отмечаю…';
+      const done = await reserveItem(item, name);
+      if (done) render();
+      else { go.disabled = false; go.textContent = 'Я это подарю'; }
+      return;
+    }
+
+    // 3) «Копировать» — кладём ссылку в буфер
+    const copy = t.closest('.copy-link');
+    if (copy){
+      e.stopPropagation();
+      const card = copy.closest('.card');
+      const item = card ? itemFromCard(card) : null;
+      const url = item ? item.url : '';
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText){
+          await navigator.clipboard.writeText(url || '');
+          copy.textContent = 'Скопировано';
+          setTimeout(() => { copy.textContent = 'Копировать'; }, 1400);
+        } else {
+          window.prompt('Скопируй ссылку:', url || '');
+        }
+      } catch (err){
+        window.prompt('Скопируй ссылку:', url || '');
+      }
+      return;
+    }
+
+    /* 4) рабочие элементы (ссылка, поле, «Копировать») — не мешаем.
+
+       ВАЖНО. Вся оборотная сторона — это кнопка «вернуть карточку»
+       (.back-flip). Поэтому проверка «нажали на кнопку» срабатывала на
+       всём обороте — и карточка НЕ возвращалась. Кнопку оборота из этой
+       проверки исключаем: она и есть переворот. */
+    const ctrl = t.closest('a, button, input, textarea, select');
+    if (ctrl && !(ctrl.classList && ctrl.classList.contains('back-flip'))) return;
+
+    // 5) остальное — переворот карточки
+    const card = t.closest('.card');
+    if (!card) return;
+    const flipped = !card.classList.contains('flipped');
+    card.classList.toggle('flipped', flipped);
+    const front = card.querySelector('.face.front');
+    const back = card.querySelector('.face.back');
+    if (front && back){
+      const set = (el, op, vis) => {
+        if (!el || !el.style) return;
+        if (typeof el.style.setProperty === 'function'){
+          el.style.setProperty('opacity', op, 'important');
+          el.style.setProperty('visibility', vis, 'important');
+        } else { el.style.opacity = op; el.style.visibility = vis; }
+      };
+      if (flipped){ set(front, '0', 'hidden'); set(back, '1', 'visible'); }
+      else { set(front, '1', 'visible'); set(back, '0', 'hidden'); }
+    }
+    flipCount++;
+    const flag = $('flipCheck');
+    if (flag){
+      flag.hidden = false;
+      flag.textContent = 'Переворотов: ' + flipCount
+        + (flipped ? '  (сейчас показан оборот)' : '  (сейчас лицевая сторона)');
+    }
+  }, true);   // перехватываем раньше прочих обработчиков
+}
+
+// Подарок по элементу карточки: ищем по номеру строки в базе
+function itemFromCard(card){
+  if (!card) return null;
+  const id = card.dataset ? card.dataset.id : null;
+  if (id === null || id === undefined) return null;
+  return items.find(x => String(x.id) === String(id)) || null;
+}
+
 // Кнопка «Обновить»: заново читает список и брони из базы
-function wireRefreshButton(){
-  const btn = $('refreshBtn');
+function wireRefreshButton(){  const btn = $('refreshBtn');
   if (!btn || btn._wired) return;
   btn._wired = true;
   btn.addEventListener('click', async () => {
