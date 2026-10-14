@@ -707,7 +707,7 @@
 
    При каждой правке страницы увеличивай номер ниже.
    ============================================================ */
-const BUILD = '2026-10-14-check1';
+const BUILD = '2026-10-14-check2';
 const BUILD_URL_MARK = 'v=' + BUILD;
 
 try {
@@ -1105,12 +1105,14 @@ const grid = $('grid');
    Запрос с ограничением по времени и ПОВТОРАМИ
 
    Без ограничения зависший запрос держит страницу «в загрузке» вечно.
-   А без повторов одна моргнувшая связь ломает всё: отметка не ставится,
-   список не читается. Поэтому: 12 секунд на попытку, до трёх попыток
-   с растущей паузой. Всего не дольше ~40 секунд.
+   А без повторов одна моргнувшая связь ломает всё.
+
+   Но и ждать слишком долго нельзя: база отвечает за 100–500 мс, поэтому
+   6 секунд на попытку и всего две попытки. Если не вышло — сразу
+   пробуем запасным способом (XHR), а не ждём дальше.
    ============================================================ */
 function fetchOnce(url, opts, ms){
-  const limit = ms || 12000;
+  const limit = ms || 6000;
   let timer = null;
   const timeout = new Promise((resolve, reject) => {
     timer = setTimeout(() => reject(new Error('сервер не ответил вовремя')), limit);
@@ -1122,11 +1124,11 @@ function fetchOnce(url, opts, ms){
   return Promise.race([request, timeout]);
 }
 
-// Повторяем только те случаи, где повтор может помочь: обрыв связи,
-// таймаут, ответ 5xx. Отказ по правам (401/403) повторять бессмысленно.
+// Повторяем только то, где повтор может помочь: обрыв связи, таймаут, 5xx.
+// Отказ по правам (401/403) повторять бессмысленно.
 function fetchWithTimeout(url, opts, ms){
-  const tries = 3;
-  const pause = n => new Promise(r => setTimeout(r, n * 700));
+  const tries = 2;
+  const pause = n => new Promise(r => setTimeout(r, n * 400));
 
   const attempt = async n => {
     try {
@@ -1171,7 +1173,7 @@ const sb = {
 
     // Обычный путь — с повторами и ограничением по времени.
     try {
-      const r = await fetchWithTimeout(url, { headers }, 12000);
+      const r = await fetchWithTimeout(url, { headers }, 8000);
       if (!r.ok) throw new Error('чтение не удалось (' + r.status + ')');
       return await r.json();
     } catch (e){
@@ -1192,7 +1194,7 @@ const sb = {
     // fetch с ограничением по времени и повторами, а при обрыве — через XHR
     let res = null;
     try {
-      const r = await fetchWithTimeout(url, { method, headers, body: payload }, 12000);
+      const r = await fetchWithTimeout(url, { method, headers, body: payload }, 8000);
       res = { ok: r.ok, status: r.status, text: await r.text() };
     } catch (e){
       console.warn('Запись не прошла обычным способом, пробую запасной:', e);
@@ -1467,17 +1469,51 @@ function readReservationsCache(){
 
    Если база ответила списком, но в нём нет отметки, которая была раньше,
    оставляем старую — лучше показать отметку, чем потерять её на глазах.
-   Исключение: если отметку сняли мы сами, её из памяти уже убрали. */
+
+   НО: если отметку сняли вручную, её надо забыть совсем. Иначе она
+   возвращалась из памяти — и снять бронь было невозможно. */
+function readRemoved(){
+  try {
+    const raw = localStorage.getItem(RES_CACHE_KEY + '.removed');
+    const obj = JSON.parse(raw || '{}');
+    const now = Date.now();
+    const out = {};
+    Object.keys(obj).forEach(k => { if (now - Number(obj[k]) < 3600 * 1000) out[k] = obj[k]; });
+    return out;
+  } catch (e) { return {}; }
+}
+
+function markRemoved(id){
+  try {
+    const obj = readRemoved();
+    obj[String(id)] = Date.now();
+    localStorage.setItem(RES_CACHE_KEY + '.removed', JSON.stringify(obj));
+  } catch (e) {}
+}
+
+// Отметку поставили заново — значит «снятой» она больше не считается
+function clearRemoved(id){
+  try {
+    const obj = readRemoved();
+    delete obj[String(id)];
+    localStorage.setItem(RES_CACHE_KEY + '.removed', JSON.stringify(obj));
+  } catch (e) {}
+}
+
 function mergeReservations(fromServer){
+  const removed = readRemoved();
   const merged = new Map();
+
+  fromServer.forEach((who, id) => {
+    if (!removed[id]) merged.set(id, who);
+  });
+
   const at = Number((function () { try { return localStorage.getItem(RES_CACHE_KEY + '.at') || 0; } catch (e) { return 0; } })());
   const fresh = Date.now() - at < 3600 * 1000;   // помним не дольше часа
 
-  fromServer.forEach((who, id) => merged.set(id, who));
-
   if (fresh && reservations && reservations.size){
     reservations.forEach((who, id) => {
-      if (!merged.has(id)) merged.set(id, who);
+      if (!merged.has(id) && !removed[id]) merged.set(id, who);
     });
   }
   reservations = merged;
@@ -1541,6 +1577,8 @@ async function reserveItem(it, name){
       return false;
     }
     reservations.set(String(id), rows[0].who || clean);
+    clearRemoved(id);
+    saveReservationsCache();
     return true;
   } catch (e){
     // прочитать не вышло, но запись прошла — показываем отметку
@@ -1565,6 +1603,9 @@ async function unreserveItem(it){
   try {
     await sb.send('DELETE', 'reservations?item_id=eq.' + id);
     reservations.delete(String(id));
+    // Запоминаем, что отметку сняли: иначе она вернётся из памяти браузера
+    markRemoved(id);
+    saveReservationsCache();
     return true;
   } catch (e){
     alert('Не удалось снять отметку: ' + (e && e.message ? e.message : e));
@@ -1817,7 +1858,8 @@ function markDirty(it){
   dirty.set(String(it.id), it);
 }
 
-function markRemoved(it){
+// Отмечаем подарок как удалённый — по номеру строки в базе
+function markItemRemoved(it){
   const key = String(it.id);
   dirty.delete(key);
   // запоминаем номер строки в базе, если подарок туда уже попал
@@ -2734,7 +2776,7 @@ function cardEl(it, idx){
     e.stopPropagation();
     if (!confirm(`Удалить «${it.name}» из вишлиста?`)) return;
     items = items.filter(x => x.id !== it.id);
-    markRemoved(it);
+    markItemRemoved(it);
     save(); render();
   });
 
