@@ -736,7 +736,7 @@
 
    При каждой правке страницы увеличивай номер ниже.
    ============================================================ */
-const BUILD = '2026-10-14-fix9';
+const BUILD = '2026-10-14-fix11';
 const BUILD_URL_MARK = 'v=' + BUILD;
 
 try {
@@ -1216,29 +1216,64 @@ const sb = {
   },
   async send(method, path, body, prefer){
     const url = SB_URL + '/rest/v1/' + path;
-    const headers = sb.writeHeaders();
-    if (prefer) headers.Prefer = prefer;
     const payload = body === undefined ? undefined : JSON.stringify(body);
 
-    // fetch с ограничением по времени и повторами, а при обрыве — через XHR
-    let res = null;
-    try {
-      const r = await fetchWithTimeout(url, { method, headers, body: payload }, 8000);
-      res = { ok: r.ok, status: r.status, text: await r.text() };
-    } catch (e){
-      console.warn('Запись не прошла обычным способом, пробую запасной:', e);
-      res = await xhrSend(method, url, headers, payload);
+    const doSend = async () => {
+      const headers = sb.writeHeaders();
+      if (prefer) headers.Prefer = prefer;
+      let res = null;
+      try {
+        const r = await fetchWithTimeout(url, { method, headers, body: payload }, 8000);
+        res = { ok: r.ok, status: r.status, text: await r.text() };
+      } catch (e){
+        console.warn('Запись не прошла обычным способом, пробую запасной:', e);
+        res = await xhrSend(method, url, headers, payload);
+      }
+      return res;
+    };
+
+    /* Право на запись продлеваем ЗАРАНЕЕ — до запроса, а не после отказа.
+       Так запрос уходит с уже свежим правом, и отказа «JWT expired» не бывает.
+
+       Продление при этом ровно одно (см. ensureFreshSession): повторное
+       использование refresh-токена Supabase считает кражей и убивает сессию. */
+    if (session) await ensureFreshSession();
+
+    let res = await doSend();
+
+    // На случай, если право всё-таки истекло между проверкой и запросом,
+    // даём РОВНО ОДНУ попытку с продлением. Больше — нельзя: второй
+    // refresh-токен убил бы сессию.
+    if (!res.ok && isTokenExpired(res)){
+      console.warn('Право на запись всё-таки истекло — продлеваю и повторяю один раз.');
+      const renewed = await sbRefresh();
+      if (renewed) res = await doSend();
     }
 
     if (!res.ok){
       let msg = String(res.text || '').slice(0, 200);
       try { const j = JSON.parse(res.text); msg = j.message || msg; } catch (e) {}
+      if (isTokenExpired(res)){
+        throw new Error('вход в базу просрочен. Нажми на заголовок трижды и войди заново — '
+          + 'после этого отметки будут ставиться и сниматься.');
+      }
       throw new Error(msg || ('ошибка ' + res.status));
     }
     if (!res.text) return null;
     try { return JSON.parse(res.text); } catch (e) { return null; }
   },
 };
+
+// Ответ говорит, что вход просрочен (именно вход, а не отказ правил доступа)
+function isTokenExpired(res){
+  if (!res) return false;
+  const t = String(res.text || '');
+  // «row-level security» и «42501» — это отказ правил, их обновление входа
+  // не исправит. Поэтому такие ответы здесь НЕ считаем просроченным входом.
+  if (/row-level security|42501|permission denied/i.test(t)) return false;
+  if (/jwt expired|token is expired|token has expired|invalid claim/i.test(t)) return true;
+  return res.status === 401;
+}
 
 // Запрос через XMLHttpRequest — запасной путь для записи
 function xhrSend(method, url, headers, body){
@@ -1270,12 +1305,61 @@ function loadSession(){
   } catch (e) { return null; }
 }
 
+/* ============================================================
+   Хранение входа
+
+   Access token (право на запись) живёт ограниченное время — обычно час.
+   Поэтому вместе с ним запоминаем, КОГДА он истекает: по этой отметке
+   страница заранее продлевает вход, не дожидаясь отказа.
+
+   Продлевать заранее важно ещё и потому, что refresh-токен в Supabase
+   можно использовать только ОДИН раз: повторное использование считается
+   попыткой кражи и УБИВАЕТ всю сессию. Значит продление должно быть
+   ровно одно и вовремя, а не «по каждой ошибке».
+   ============================================================ */
 function storeSession(s){
   session = s;
   try {
-    if (s) localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s));
-    else localStorage.removeItem(SB_SESSION_KEY);
+    if (s){
+      // когда истекает право на запись
+      if (s.expires_at) s.expires_at = Number(s.expires_at);
+      else if (s.expires_in) s.expires_at = Math.floor(Date.now() / 1000) + Number(s.expires_in);
+      localStorage.setItem(SB_SESSION_KEY, JSON.stringify(s));
+    } else {
+      localStorage.removeItem(SB_SESSION_KEY);
+    }
   } catch (e) {}
+}
+
+// Сколько секунд осталось до истечения права на запись.
+// Если срок неизвестен — не трогаем вход: продление без нужды опасно,
+// потому что refresh-токен одноразовый.
+function secondsLeftInSession(){
+  if (!session) return -1;
+  if (!session.expires_at) return Infinity;
+  return session.expires_at - Math.floor(Date.now() / 1000);
+}
+
+// Продление должно быть РОВНО ОДНО в один момент времени: если два запроса
+// одновременно попросят продлить вход, второй refresh-токен убьёт сессию.
+let refreshInFlight = null;
+
+async function ensureFreshSession(){
+  if (!session) return false;
+
+  // запас в 2 минуты: успеваем продлить до того, как право кончится
+  if (secondsLeftInSession() > 120) return true;
+
+  if (refreshInFlight) return refreshInFlight;      // ждём уже начатое продление
+
+  refreshInFlight = (async () => {
+    try {
+      return await sbRefresh();
+    } finally {
+      refreshInFlight = null;
+    }
+  })();
+  return refreshInFlight;
 }
 
 // Вход через XMLHttpRequest. Нужен как запасной путь: иногда fetch падает
@@ -1327,6 +1411,8 @@ async function sbLogin(email, password){
   return data;
 }
 
+// Обновляем вход. Если продлить не удалось — забываем его, чтобы страница
+// честно попросила войти заново, а не повторяла «JWT expired».
 async function sbRefresh(){
   if (!session || !session.refresh_token) return false;
   try {
@@ -1335,11 +1421,18 @@ async function sbRefresh(){
       headers: { apikey: SB_KEY, 'Content-Type': 'application/json' },
       body: JSON.stringify({ refresh_token: session.refresh_token }),
     }, 15000);
-    if (!r.ok) return false;
+    if (!r.ok){
+      console.warn('Вход продлить не удалось (' + r.status + ') — потребуется войти заново.');
+      sbLogout();
+      return false;
+    }
     const data = await r.json();
     storeSession(data);
     return true;
-  } catch (e) { return false; }
+  } catch (e){
+    console.warn('Вход продлить не удалось:', e);
+    return false;
+  }
 }
 
 function sbLogout(){
